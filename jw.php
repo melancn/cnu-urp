@@ -7,18 +7,25 @@ class jw
     private $UidCookie;
     private $PortalBill;
     private $SsoBill;
-    
+    private $user;
+	private $psw;
+	
+	function __construct($user,$psw){
+		$this->user = $user;
+		$this->psw = $psw;
+	}
+	
 	public function getTime ()  
     {
         list ($msec, $sec) = explode(" ", microtime());  
         return (float)$msec + (float)$sec; 
     }  
 	
-    public function is_user($user,$psw)
+    public function is_user()
     {
-        if(is_numeric($user) && !empty($psw)){
-            $psw = urlencode($psw);
-            $url = "http://uid.cnu.edu.cn/userPasswordValidate.portal?Login.Token1=$user&Login.Token2=$psw";
+        if(is_numeric($this->user) && !empty($this->psw)){
+            $this->psw = urlencode($this->psw);
+            $url = "http://uid.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2={$this->psw}";
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -40,7 +47,7 @@ class jw
         else return 0;
     }
     
-    private function bk_jw_info($user,$psw)
+    private function bk_jw_info()
     {
         //进入URP,获取cook
         $url = "http://xk.cnu.edu.cn/zdtj.jsp";
@@ -49,7 +56,7 @@ class jw
         curl_setopt($ch, CURLOPT_HEADER, 0);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);  
         //curl_setopt($ch, CURLOPT_TIMEOUT,1);
-        curl_setopt($ch, CURLOPT_COOKIE, $this->GetUidCookie($user,$psw));
+        curl_setopt($ch, CURLOPT_COOKIE, $this->GetUidCookie());
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
         $html=curl_exec($ch);
         curl_close($ch);
@@ -57,11 +64,11 @@ class jw
 		return($matches[1]);
     }
     
-    public function bk_bxqcj($user,$psw)
+    public function bk_bxqcj()
     {
-        $info = $this->bk_jw_info($user,$psw);
+        $info = $this->bk_jw_info();
         //进入URP,获取cook
-        $url = "http://202.204.208.75/loginAction.do?zjh=$user&mm={$info[2]}&ldap=auth";
+        $url = "http://202.204.208.75/loginAction.do?zjh={$this->user}&mm={$info[2]}&ldap=auth";
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -72,7 +79,7 @@ class jw
         if(empty($content) && $this->count !=2)
         {
             $this->count ++;
-            $this->bk_bxqcj($user,$psw);//
+            $this->bk_bxqcj();//
         }
         else if(empty($content))return false;
         // 解析COOKIE
@@ -92,11 +99,11 @@ class jw
         return mb_convert_encoding($html,'UTF-8','GBK');
     }
     
-    public function bk_cj_all($user,$psw)
+    public function bk_cj_all()
     {
-        $info = $this->bk_jw_info($user,$psw);
+        $info = $this->bk_jw_info();
         //进入URP,获取cook
-        $url = "http://202.204.208.75/loginAction.do?zjh=$user&mm={$info[2]}&ldap=auth";
+        $url = "http://202.204.208.75/loginAction.do?zjh={$this->user}&mm={$info[2]}&ldap=auth";
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -133,14 +140,14 @@ class jw
     }
     
     //--------------------绩点-----------------------------------
-    public function jidian($user,$psw)
+    public function jidian()
 	{
-        if(preg_match('/^2\d+/',$user))
+        if(preg_match('/^2\d+/',$this->user))
             return false;
         
         //判、判断保存的账号是否正确
-        if ($this->is_user($user,$psw) === 1){         
-            $html = $this->bk_cj_all($user,$psw);
+        if ($this->is_user() === 1){         
+            $html = $this->bk_cj_all();
         }
         else return false;
         if(empty($html)) return '';
@@ -188,11 +195,11 @@ class jw
         else return false;
 	}
     
-    public function yjs_cj($user,$psw)
+    public function yjs_cj()
     {
-        $bill = $this->model($user,$psw,'newjw_yjs');
+        $bill = $this->model($this->user,$this->psw,'newjw_yjs');
                 //进入URP,获取cook
-        $url = "http://202.204.208.67:8082/menHu.do?bill=$bill";
+        $url = "http://202.204.208.67:8082/menHu.do?bill={$bill}";
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -202,9 +209,9 @@ class jw
         $content = curl_exec($ch);
         //获取登陆账号密码j_acegi_login.do
 		preg_match_all("/value=\"(.*?)\"/i",$content, $matches);
-		$psw=$matches[1][2];
+		$this->psw=$matches[1][2];
 		
-		$url = "http://202.204.208.67:8082/j_acegi_login.do?j_captcha_response=&j_username=$user&j_password=$psw";
+		$url = "http://202.204.208.67:8082/j_acegi_login.do?j_captcha_response=&j_username={$this->user}&j_password={$this->psw}";
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -247,12 +254,12 @@ class jw
 		return $s;
     }
     
-    private function GetUidCookie($user,$psw)
+    private function GetUidCookie()
     {
         if($this->UidCookie) return $this->UidCookie;
 		else{
-			$psw = urlencode($psw);
-            $url = "http://uid.cnu.edu.cn/userPasswordValidate.portal?Login.Token1=$user&Login.Token2=$psw";
+			$this->psw = urlencode($this->psw);
+            $url = "http://uid.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2={$this->psw}";
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -268,13 +275,13 @@ class jw
 				$this->UidCookie = trim($matches[1][0]);
                 return $this->UidCookie;
 			}
-			else $this->GetUidCookie($user,$psw);
+			else $this->GetUidCookie();
 		}
     }
-    private function GetPortalCookie($user,$psw)
+    private function GetPortalCookie()
     {
-        $info = $this->bk_jw_info($user,$psw);
-        $url = "http://202.204.208.141/Login?userName=$user&password={$info[2]}";
+        $info = $this->bk_jw_info();
+        $url = "http://202.204.208.141/Login?userName={$this->user}&password={$info[2]}";
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -286,17 +293,17 @@ class jw
         list($header, $body) = explode("\r\n\r\n", $content);
         preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
         $cookie = explode("Set-Cookie:", $matches[0][1]);
-        if($cookie[1] == null) $this->GetPortalCookie($user,$psw);
+        if($cookie[1] == null) $this->GetPortalCookie();
         $this->PortalCookie = $cookie[1];
     }
     
-    private function GetPortalBill($user,$psw)
+    private function GetPortalBill()
     {
         if(is_string($this->PortalCookie))$cookie = $this->PortalCookie;
         else 
         {
-            $this->GetPortalCookie($user,$psw);
-            $this->GetPortalBill($user,$psw);
+            $this->GetPortalCookie();
+            $this->GetPortalBill();
         }
 
         //携带cookie访问信息门户,获取bill
@@ -315,20 +322,20 @@ class jw
         if($this->PortalBill == null && $this->count != 2) 
         {
             $this->count ++;
-            $this->GetPortalBill($user,$psw);
+            $this->GetPortalBill();
         }
         
     }
     
-    private function model($user,$psw,$appid)
+    private function model($appid)
     {
-        $this->GetPortalBill($user,$psw);
+        $this->GetPortalBill();
         if ($this->PortalBill == NULL && $this->count ==2) return false;
         else $bill = $this->PortalBill;
         
         //获取漫游票据
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, "http://202.204.208.141/mhpd/xnyy/test.jsp?bill=$bill&userip=null&userid=$user&appid=$appid");
+        curl_setopt($ch, CURLOPT_URL, "http://202.204.208.141/mhpd/xnyy/test.jsp?bill={$bill}&userip=null&userid={$this->user}&appid={$appid}");
         curl_setopt($ch, CURLOPT_HEADER, 0);
         curl_setopt($ch, CURLOPT_TIMEOUT,1);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);        
@@ -340,7 +347,7 @@ class jw
         if($matches[1] == 'null' && $this->count !=4)
         {
             $this->count ++;
-            $this->model($user,$appid);//
+            $this->model($this->user,$appid);//
         }
         else if(empty($matches) || $matches[1] == 'null' )
         {
@@ -351,22 +358,22 @@ class jw
     
                       
      
-    public function this_score_result($user,$psw)
+    public function this_score_result()
     {
 		//研究生
-		if(preg_match('/^2\d+/',$user)) 
+		if(preg_match('/^2\d+/',$this->user)) 
 		{
-			$yjs = $this->yjs_cj($user,$psw);
+			$yjs = $this->yjs_cj();
 			if(is_array( $yjs ) && !empty($yjs))return $yjs;
 			else return '研究生教务获取失败';
 		}
 		//判、判断保存的账号是否正确
         	
-        $re = $this->is_user($user,$psw);
+        $re = $this->is_user();
 		if ($re === 0) return '学号错误，请联系我们';
 		elseif ($re === 1)
 		{//已绑定，获取学号，获取分数
-			$html = $this->bk_bxqcj($user,$psw);
+			$html = $this->bk_bxqcj();
 			if($html == false) return '学校服务器认证错误，请过几分钟再重新查询';
 			if(preg_match('/数据库/',$html)) return '请重新查询';
 			if(preg_match('/本学期成绩查询列表/',$html))
@@ -384,15 +391,15 @@ class jw
 			}
 			elseif( ($this->getTime() - $this->nowTime) >=4.5 )
 				return '请求超时，请重试';
-			else $this->this_score_result($user,$psw);
+			else $this->this_score_result();
 		}
 		elseif ($re === 2) return '用户不存在或密码错误，请重新绑定';
 		elseif ($re === 3) return '未知错误，请重试发起请求';
         else return '请重试';
     }
             
-	public function card($user,$psw){
-		$cookie = $this->GetUidCookie($user,$psw);
+	public function card(){
+		$cookie = $this->GetUidCookie();
 		//携带cookie访问信息门户,获取bill
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, 'http://uid.cnu.edu.cn/index.portal');
