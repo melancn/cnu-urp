@@ -181,7 +181,7 @@ class jw
 		    if($s[$i][6]=='良好')$s[$i][6]=80;
             if($s[$i][6]=='中等')$s[$i][6]=70;
             if($s[$i][6]=='及格')$s[$i][6]=60;
-		    if($s[$i][6]<60)$s[$i][4]=0;
+		    if($s[$i][6]<60)$s[$i][6]=50;
 		    $jidian+=(float)(($s[$i][6]/10-5)*(float)$s[$i][4]);
 		    $xuefen+=(float)$s[$i][4];
 		}
@@ -379,15 +379,11 @@ class jw
 			if(preg_match('/本学期成绩查询列表/',$html))
 			{
 			//解析本学期分数页面
-				preg_match_all("/<tr class=\"([\S\s]*?)<\/tr>/i", $html, $matches);
-				for ($i=0;$i<count($matches[0]);$i++)
-					preg_match_all('/<td align="center">(\s|.)*?<\/td>/i', $matches[0][$i], $cache[$i]);
-				for ($i=0;$i<count($cache);$i++)
-					$matches[$i]=$cache[$i][0];
-				for ($i=0;$i<count($matches);$i++)
-					for ($j=0;$j<7;$j++)
-						$s[$i][$j]=preg_replace('/<([\S\s]*?)>|<\/([\S\s]*?)>|\s/i','',$matches[$i][$j]);
-				return $s;
+				preg_match_all('/<table([\s\S]*?)<\/table>/i',$html,$matches);
+				$content = $matches[0][4];
+				$content = preg_replace('/class="(.*?)"/','',$content);
+				$content = str_replace(array("\n","\t"),'',$content);
+				return $content;
 			}
 			elseif( ($this->getTime() - $this->nowTime) >=4.5 )
 				return '请求超时，请重试';
