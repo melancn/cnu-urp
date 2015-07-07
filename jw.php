@@ -10,10 +10,15 @@ class jw
     private $user;
 	private $psw;
 	
-	function __construct($user,$psw){
-		$this->user = $user;
-		$this->psw = $psw;
+	public function __construct($user,$psw){
+		$this->setUser($user,$psw);
 	}
+	
+	public function setUser($user,$psw) 
+    {
+        $this->user = $user;
+		$this->psw = $psw;
+    }  
 	
 	public function getTime ()  
     {
