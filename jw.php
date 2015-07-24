@@ -84,7 +84,7 @@ class jw
         if(empty($content) && $this->count !=2)
         {
             $this->count ++;
-            $this->bk_bxqcj();//
+            return $this->bk_bxqcj();//
         }
         else if(empty($content))return false;
         // 解析COOKIE
@@ -101,6 +101,11 @@ class jw
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
         $html=curl_exec($ch);
         curl_close($ch);
+		if(preg_match("/数据库忙/",mb_convert_encoding($html,'UTF-8','GBK')) && $this->count !=2)
+        {
+            $this->count ++;
+            return $this->bk_bxqcj();//
+        }
         return mb_convert_encoding($html,'UTF-8','GBK');
     }
     
@@ -380,7 +385,7 @@ class jw
 		{//已绑定，获取学号，获取分数
 			$html = $this->bk_bxqcj();
 			if($html == false) return '学校服务器认证错误，请过几分钟再重新查询';
-			if(preg_match('/数据库/',$html)) return '请重新查询';
+			if(preg_match('/数据库忙/',$html)) return '请重新查询';
 			if(preg_match('/本学期成绩查询列表/',$html))
 			{
 			//解析本学期分数页面
