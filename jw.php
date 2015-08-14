@@ -55,7 +55,7 @@ class jw
     private function bk_jw_info()
     {
         //进入URP,获取cook
-        $url = "http://xk.cnu.edu.cn/zdtj.jsp";
+        $url = "http://xk.cnu.edu.cn/";
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 0);
@@ -65,15 +65,15 @@ class jw
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
         $html=curl_exec($ch);
         curl_close($ch);
-		preg_match_all('/value="(.*?)"/',$html,$matches);
-		return($matches[1]);
+		preg_match_all('/href="(.*?)"/',$html,$matches);
+		return $matches[1][0];
     }
     
     public function bk_bxqcj()
     {
         $info = $this->bk_jw_info();
         //进入URP,获取cook
-        $url = "http://202.204.208.75/loginAction.do?zjh={$this->user}&mm={$info[2]}&ldap=auth";
+        $url = $info;
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
