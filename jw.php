@@ -30,7 +30,7 @@ class jw
     {
         if(is_numeric($this->user) && !empty($this->psw)){
             $this->psw = urlencode($this->psw);
-            $url = "http://uid.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2={$this->psw}";
+            $url = "http://portal.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2={$this->psw}";
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -39,15 +39,35 @@ class jw
             curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
             $content = curl_exec($ch);
             curl_close($ch);
-            //判断是否成功
-            if(preg_match("/handleLoginSuccessed/i", $content)){
-                list($header, $body) = explode("\r\n\r\n", $content);
-                preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
-                $this->UidCookie = trim($matches[1][0]);
-                return 1;
+            if(empty($content)){//校外使用VPN认证
+                $postfields = array('method'=>'ldap','uname'=>$this->user,'pwd'=>$this->psw);
+                $postfields = http_build_query($postfields);
+                $ch = curl_init();
+                curl_setopt_array($ch,array(
+                    CURLOPT_URL => 'https://vpn.cnu.edu.cn/prx/000/http/localhost/login',
+                    CURLOPT_HEADER => true,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_POST => true,
+                    CURLOPT_POSTFIELDS => $postfields,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYHOST => false,
+                    CURLOPT_TIMEOUT => 10,
+                ));
+                $content = curl_exec($ch);
+                if(stripos($content,'https://vpn.cnu.edu.cn/prx/000/http/localhost/welcome') !== false){
+                    return 1;
+                }
+            }else{
+                //判断是否成功
+                if(preg_match("/handleLoginSuccessed/i", $content)){
+                    list($header, $body) = explode("\r\n\r\n", $content);
+                    preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
+                    $this->UidCookie = trim($matches[1][0]);
+                    return 1;
+                }
+                elseif(preg_match("/handleLoginFailure/i", $content)) return 2;
             }
-            elseif(preg_match("/handleLoginFailure/i", $content)) return 2;
-            else return 3;
+            return 3;
         }
         else return 0;
     }
@@ -183,24 +203,24 @@ class jw
                     $s[$i][$j]=preg_replace('/<([\S\s]*?)>|<\/([\S\s]*?)>|\s|&nbsp;/i','',$matches[$i][$j]);
                 }
             }
-        unset($matches);
-        //含有选修的绩点
-        for($i=0,$jidian=0,$xuefen=0;$i<count($s);$i++)
-        {
-            if($s[$i][6]=='优秀')$s[$i][6]=90;
-            if($s[$i][6]=='良好')$s[$i][6]=80;
-            if($s[$i][6]=='中等')$s[$i][6]=70;
-            if($s[$i][6]=='及格')$s[$i][6]=60;
-            if($s[$i][6]<60)$s[$i][6]=50;
-            $jidian+=(float)(($s[$i][6]/10-5)*(float)$s[$i][4]);
-            $xuefen+=(float)$s[$i][4];
-        }
+            unset($matches);
+            //含有选修的绩点
+            for($i=0,$jidian=0,$xuefen=0;$i<count($s);$i++)
+            {
+                if($s[$i][6]=='优秀')$s[$i][6]=90;
+                if($s[$i][6]=='良好')$s[$i][6]=80;
+                if($s[$i][6]=='中等')$s[$i][6]=70;
+                if($s[$i][6]=='及格')$s[$i][6]=60;
+                if($s[$i][6]<60)$s[$i][6]=50;
+                $jidian+=(float)(($s[$i][6]/10-5)*(float)$s[$i][4]);
+                $xuefen+=(float)$s[$i][4];
+            }
+                
+            $jd[0] = round($jidian/$xuefen*100)/100;
             
-        $jd[0] = floor($jidian/$xuefen*100)/100;
-        
-        $jd[1] = $mmmm;
-        
-        return $jd;
+            $jd[1] = $mmmm;
+            
+            return $jd;
         }
         else return false;
     }
@@ -269,7 +289,7 @@ class jw
         if($this->UidCookie) return $this->UidCookie;
         else{
             $this->psw = urlencode($this->psw);
-            $url = "http://uid.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2={$this->psw}";
+            $url = "http://portal.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2={$this->psw}";
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -287,86 +307,7 @@ class jw
             }
             else $this->GetUidCookie();
         }
-    }
-    private function GetPortalCookie()
-    {
-        $info = $this->bk_jw_info();
-        $url = "http://202.204.208.141/Login?userName={$this->user}&password={$info[2]}";
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_HEADER, 1);
-        curl_setopt($ch, CURLOPT_TIMEOUT,1);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_USERAGENT,"Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Maxthon/4.1 Chrome/30.0.1599.101 Safari/537.36");
-        $content = curl_exec($ch);
-        // 解析COOKIE
-        list($header, $body) = explode("\r\n\r\n", $content);
-        preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
-        $cookie = explode("Set-Cookie:", $matches[0][1]);
-        if($cookie[1] == null) $this->GetPortalCookie();
-        $this->PortalCookie = $cookie[1];
-    }
-    
-    private function GetPortalBill()
-    {
-        if(is_string($this->PortalCookie))$cookie = $this->PortalCookie;
-        else 
-        {
-            $this->GetPortalCookie();
-            $this->GetPortalBill();
-        }
-
-        //携带cookie访问信息门户,获取bill
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, 'http://202.204.208.141/mhpd/xnyy/xnyy.jsp');
-        curl_setopt($ch, CURLOPT_HEADER, 0);
-        curl_setopt($ch, CURLOPT_TIMEOUT,1);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);        
-        curl_setopt($ch, CURLOPT_COOKIE, $cookie);
-        curl_setopt($ch, CURLOPT_USERAGENT,"Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Maxthon/4.1 Chrome/30.0.1599.101 Safari/537.36"); 
-        $content=curl_exec($ch);
-        preg_match("/\/test\.jsp\?bill=(\w+)&/i",$content,$matches);
-        
-        if(empty($matches))$this->PortalBill = null;
-        else $this->PortalBill = $matches[1];
-        if($this->PortalBill == null && $this->count != 2) 
-        {
-            $this->count ++;
-            $this->GetPortalBill();
-        }
-        
-    }
-    
-    private function model($appid)
-    {
-        $this->GetPortalBill();
-        if ($this->PortalBill == NULL && $this->count ==2) return false;
-        else $bill = $this->PortalBill;
-        
-        //获取漫游票据
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, "http://202.204.208.141/mhpd/xnyy/test.jsp?bill={$bill}&userip=null&userid={$this->user}&appid={$appid}");
-        curl_setopt($ch, CURLOPT_HEADER, 0);
-        curl_setopt($ch, CURLOPT_TIMEOUT,1);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);        
-        curl_setopt($ch, CURLOPT_COOKIE, $cookie);
-        curl_setopt($ch, CURLOPT_USERAGENT,"Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Maxthon/4.1 Chrome/30.0.1599.101 Safari/537.36"); 
-        $html=curl_exec($ch);
-        curl_close($ch);
-        preg_match("/bill=(\w+)\"/i",$html,$matches);
-        if($matches[1] == 'null' && $this->count !=4)
-        {
-            $this->count ++;
-            $this->model($this->user,$appid);//
-        }
-        else if(empty($matches) || $matches[1] == 'null' )
-        {
-            return false;
-        }
-        else return $matches[1];
     } 
-    
-                      
      
     public function this_score_result()
     {
