@@ -62,7 +62,7 @@ class jw
                 if(preg_match("/handleLoginSuccessed/i", $content)){
                     list($header, $body) = explode("\r\n\r\n", $content);
                     preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
-                    $this->UidCookie = trim($matches[1][0]);
+                    $this->UidCookie = implode('',$matches[1]);
                     return 1;
                 }
                 elseif(preg_match("/handleLoginFailure/i", $content)) return 2;
@@ -131,9 +131,9 @@ class jw
     
     public function bk_cj_all()
     {
-        $info = $this->bk_jw_info();
+        $url=$info = $this->bk_jw_info();
         //进入URP,获取cook
-        $url = "http://202.204.208.75/loginAction.do?zjh={$this->user}&mm={$info[2]}&ldap=auth";
+        //$url = "http://202.204.208.75/loginAction.do?mh_zjh={$this->user}&mh_mm={$info[2]}&dlfs=mh";
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -142,8 +142,8 @@ class jw
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
         $content = curl_exec($ch);
         // 解析COOKIE
-        preg_match("/set\-cookie:([^\r\n]*)/i",$content, $matches);
-        $cookie = $matches[1];
+        preg_match_all("/set\-cookie:([^\r\n]*)/i",$content, $matches);
+        $cookie = implode('',$matches[1]);
         //需要先获取这个页面，不然获取全部成绩会有很大几率页面错误
         $url = 'http://202.204.208.75/gradeLnAllAction.do?type=ln&oper=fa';
         $ch = curl_init();
@@ -302,7 +302,7 @@ class jw
             if(preg_match("/handleLoginSuccessed/i", $content)){
                 list($header, $body) = explode("\r\n\r\n", $content);
                 preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
-                $this->UidCookie = trim($matches[1][0]);
+                $this->UidCookie = implode('',$matches[1]);
                 return $this->UidCookie;
             }
             else $this->GetUidCookie();
