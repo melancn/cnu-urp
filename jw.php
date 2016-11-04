@@ -9,6 +9,7 @@ class jw
     private $SsoBill;
     private $user;
     private $psw;
+    private $isuser;
     
     public function __construct($user,$psw){
         $this->setUser($user,$psw);
@@ -18,6 +19,7 @@ class jw
     {
         $this->user = $user;
         $this->psw = $psw;
+        $this->isuser = false;
     }  
     
     public function getTime ()  
@@ -28,6 +30,7 @@ class jw
     
     public function is_user()
     {
+        if($this->isuser !== false) return $this->isuser;
         if(is_numeric($this->user) && !empty($this->psw)){
             $this->psw = urlencode($this->psw);
             $url = "http://portal.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2={$this->psw}";
@@ -55,6 +58,7 @@ class jw
                 ));
                 $content = curl_exec($ch);
                 if(stripos($content,'https://vpn.cnu.edu.cn/prx/000/http/localhost/welcome') !== false){
+                    $this->isuser = 1;
                     return 1;
                 }
             }else{
@@ -63,13 +67,19 @@ class jw
                     list($header, $body) = explode("\r\n\r\n", $content);
                     preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
                     $this->UidCookie = implode('',$matches[1]);
+                    $this->isuser = 1;
                     return 1;
+                }elseif(preg_match("/handleLoginFailure/i", $content)) {
+                    $this->isuser = 2;
+                    return 2;
                 }
-                elseif(preg_match("/handleLoginFailure/i", $content)) return 2;
             }
+            $this->isuser = 3;
             return 3;
+        }else{
+            $this->isuser = 0;
+            return 0;
         }
-        else return 0;
     }
     
     private function bk_jw_info()
@@ -101,12 +111,10 @@ class jw
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
         $content = curl_exec($ch);
-        if(empty($content) && $this->count !=2)
-        {
+        if(empty($content) && $this->count !=2){
             $this->count ++;
             return $this->bk_bxqcj();//
-        }
-        else if(empty($content))return false;
+        }else if(empty($content))return false;
         // 解析COOKIE
         preg_match("/set\-cookie:([^\r\n]*)/i",$content, $matches);
         $cookie = $matches[1];
@@ -121,8 +129,7 @@ class jw
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
         $html=curl_exec($ch);
         curl_close($ch);
-        if(preg_match("/数据库忙/",mb_convert_encoding($html,'UTF-8','GBK')) && $this->count !=2)
-        {
+        if(preg_match("/数据库忙/",mb_convert_encoding($html,'UTF-8','GBK')) && $this->count !=2){
             $this->count ++;
             return $this->bk_bxqcj();//
         }
@@ -181,8 +188,7 @@ class jw
         }
         else return false;
         if(empty($html)) return '';
-        if(!preg_match('/500 Servlet Exception/',$html))
-        {
+        if(!preg_match('/500 Servlet Exception/',$html)){
             //解析分数页面
             preg_match_all("/<td valign=\"middle\">&nbsp;<b>([\S\s]*?)<\/b>/i", $html, $matches);//获取方案名称
             $mmmm = $matches[1][0];
