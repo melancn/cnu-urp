@@ -22,8 +22,7 @@ class jw
         $this->isuser = false;
     }  
     
-    public function getTime ()  
-    {
+    public function getTime(){
         list ($msec, $sec) = explode(" ", microtime());  
         return (float)$msec + (float)$sec; 
     }  
@@ -179,15 +178,13 @@ class jw
     //--------------------绩点-----------------------------------
     public function jidian()
     {
-        if(preg_match('/^2\d+/',$this->user))
-            return false;
+        if(preg_match('/^2\d+/',$this->user)) return array('code'=>0,'msg'=>'不支持研究生查询');
         
         //判、判断保存的账号是否正确
         if ($this->is_user() === 1){         
             $html = $this->bk_cj_all();
-        }
-        else return false;
-        if(empty($html)) return '';
+        }else return array('code'=>0,'msg'=>'账号密码错误');
+        if(empty($html)) return array('code'=>0,'msg'=>'服务器错误');
         if(!preg_match('/500 Servlet Exception/',$html)){
             //解析分数页面
             preg_match_all("/<td valign=\"middle\">&nbsp;<b>([\S\s]*?)<\/b>/i", $html, $matches);//获取方案名称
@@ -202,10 +199,8 @@ class jw
             $count = count($cache);
             for ($i=0;$i<$count;$i++)$matches[$i]=$cache[$i][0];
             $count = count($matches);
-            for ($i=0;$i<$count;$i++)
-            {
-                for ($j=0;$j<7;$j++)
-                {
+            for ($i=0;$i<$count;$i++){
+                for ($j=0;$j<7;$j++){
                     $s[$i][$j]=preg_replace('/<([\S\s]*?)>|<\/([\S\s]*?)>|\s|&nbsp;/i','',$matches[$i][$j]);
                 }
             }
@@ -222,13 +217,10 @@ class jw
                 $xuefen+=(float)$s[$i][4];
             }
                 
-            $jd[0] = round($jidian/$xuefen*100)/100;
+            $jd = round($jidian/$xuefen*100)/100;
             
-            $jd[1] = $mmmm;
-            
-            return $jd;
-        }
-        else return false;
+            return array('code'=>1,'gpa'=>$jd,'name'=>$mmmm);
+        }else return array('code'=>0,'msg'=>'服务器繁忙');
     }
     
     public function yjs_cj()
