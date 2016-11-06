@@ -189,19 +189,16 @@ class jw
             //解析分数页面
             preg_match_all("/<td valign=\"middle\">&nbsp;<b>([\S\s]*?)<\/b>/i", $html, $matches);//获取方案名称
             $mmmm = $matches[1][0];
-            preg_match_all("/<tr class=\"([\S\s]*?)<\/tr>/i", $html, $matches);
+            preg_match_all("/<tr class=\"odd([\S\s]*?)<\/tr>/i", $html, $matches);
             $count = count($matches[0]);
-            for ($i=0;$i<$count;$i++)
-            {
-                preg_match_all('/<td align="center">(\s|.)*?<\/td>/i', $matches[0][$i], $cache[$i]);
-            } 
-            $matches = null;
-            $count = count($cache);
-            for ($i=0;$i<$count;$i++)$matches[$i]=$cache[$i][0];
-            $count = count($matches);
-            for ($i=0;$i<$count;$i++){
-                for ($j=0;$j<7;$j++){
-                    $s[$i][$j]=preg_replace('/<([\S\s]*?)>|<\/([\S\s]*?)>|\s|&nbsp;/i','',$matches[$i][$j]);
+			if(!$count) return array('code'=>1,'gpa'=>0,'name'=>$mmmm);
+            $cache = array();
+			foreach($matches[0] as $k => $v) preg_match_all('/<td align="center">(\s|.)*?<\/td>/i', $v, $cache[$k]);
+            $matches = array();
+			foreach($cache as $k => $v) $matches[$k]=$v[0];
+            foreach($matches[0] as $i => $v){
+                foreach($v as $j => $k){
+                    $s[$i][$j]=preg_replace('/<([\S\s]*?)>|<\/([\S\s]*?)>|\s|&nbsp;/i','',$k);
                 }
             }
             unset($matches);
@@ -209,10 +206,10 @@ class jw
             for($i=0,$jidian=0,$xuefen=0;$i<count($s);$i++)
             {
                 if($s[$i][6]=='优秀')$s[$i][6]=90;
-                if($s[$i][6]=='良好')$s[$i][6]=80;
-                if($s[$i][6]=='中等')$s[$i][6]=70;
-                if($s[$i][6]=='及格')$s[$i][6]=60;
-                if($s[$i][6]<60)$s[$i][6]=50;
+                elseif($s[$i][6]=='良好')$s[$i][6]=80;
+                elseif($s[$i][6]=='中等')$s[$i][6]=70;
+                elseif($s[$i][6]=='及格')$s[$i][6]=60;
+                elseif($s[$i][6]<60)$s[$i][6]=50;
                 $jidian+=(float)(($s[$i][6]/10-5)*(float)$s[$i][4]);
                 $xuefen+=(float)$s[$i][4];
             }
