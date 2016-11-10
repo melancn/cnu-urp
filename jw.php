@@ -5,6 +5,7 @@ class jw
     private $count = 0;
     private $PortalCookie;
     private $UidCookie;
+    private $UrpCookie;
     private $PortalBill;
     private $SsoBill;
     private $user;
@@ -20,6 +21,9 @@ class jw
         $this->user = $user;
         $this->psw = $psw;
         $this->isuser = false;
+        $this->PortalCookie = false;
+        $this->UidCookie = false;
+        $this->UrpCookie = false;
     }  
     
     public function getTime(){
@@ -98,33 +102,34 @@ class jw
         return $matches[1][0];
     }
     
-    public function bk_bxqcj()
+    private function getUrpCookie()
     {
-        $info = $this->bk_jw_info();
+        if(!empty($this->UrpCookie)) return $this->UrpCookie;
+        
+        $url = $this->bk_jw_info();
         //进入URP,获取cook
-        $url = $info;
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
-        curl_setopt($ch, CURLOPT_TIMEOUT,1);
+        // curl_setopt($ch, CURLOPT_TIMEOUT,2);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
         $content = curl_exec($ch);
-        if(empty($content) && $this->count !=2){
-            $this->count ++;
-            return $this->bk_bxqcj();//
-        }else if(empty($content))return false;
         // 解析COOKIE
         preg_match("/set\-cookie:([^\r\n]*)/i",$content, $matches);
-        $cookie = $matches[1];
-
+        $this->UrpCookie = implode('',$matches[1]);
+        return $this->UrpCookie;
+    }
+    
+    public function bk_bxqcj()
+    {
         $url = 'http://202.204.208.75/bxqcjcxAction.do';
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 0);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);  
-        curl_setopt($ch, CURLOPT_TIMEOUT,1);
-        curl_setopt($ch, CURLOPT_COOKIE, $cookie);
+        curl_setopt($ch, CURLOPT_TIMEOUT,2);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
         $html=curl_exec($ch);
         curl_close($ch);
@@ -137,19 +142,6 @@ class jw
     
     public function bk_cj_all()
     {
-        $url=$info = $this->bk_jw_info();
-        //进入URP,获取cook
-        //$url = "http://202.204.208.75/loginAction.do?mh_zjh={$this->user}&mh_mm={$info[2]}&dlfs=mh";
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_HEADER, 1);
-        curl_setopt($ch, CURLOPT_HTTPHEADER,array('Accept-Language: zh-cn','Connection: Keep-Alive')); 
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
-        $content = curl_exec($ch);
-        // 解析COOKIE
-        preg_match_all("/set\-cookie:([^\r\n]*)/i",$content, $matches);
-        $cookie = implode('',$matches[1]);
         //需要先获取这个页面，不然获取全部成绩会有很大几率页面错误
         $url = 'http://202.204.208.75/gradeLnAllAction.do?type=ln&oper=fa';
         $ch = curl_init();
@@ -157,7 +149,7 @@ class jw
         curl_setopt($ch, CURLOPT_HEADER, 0);
         curl_setopt($ch, CURLOPT_HTTPHEADER,array('Accept-Language: zh-cn','Connection: Keep-Alive')); 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);        
-        curl_setopt($ch, CURLOPT_COOKIE, $cookie);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
         $content=curl_exec($ch);
         
@@ -167,7 +159,7 @@ class jw
         curl_setopt($ch, CURLOPT_HEADER, 0);
         curl_setopt($ch, CURLOPT_HTTPHEADER,array('Connection: keep-alive','DNT: 1','Referer: http://xk.cnu.edu.cn/gradeLnAllAction.do?type=ln&oper=fa','Accept-Encoding: gzip,deflate','Accept-Language: zh-CN')); 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);        
-        curl_setopt($ch, CURLOPT_COOKIE, $cookie);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
         $content=curl_exec($ch);
         curl_close($ch);
@@ -354,4 +346,58 @@ class jw
         return str_replace('&nbsp;','',strip_tags(trim($match[1])));
     }
     
+    function bk_kccj($kch,$kxh,$page=1)
+	{
+        $month = date('m');
+        $year = date('Y');
+        if($month<4 || $month>10){
+            $xq = ($year-1).'-'.$year.'-1-1';
+        }else{
+            $xq = ($year-1).'-'.$year.'-2-1';
+        }
+        $key = md5($xq.'_'.$kch.'_'.$kxh.'_'.$page);
+        //进入URP,获取cook
+        $dir = '/tmp/scoretable/'.$xq;
+        if(!is_dir($dir)) mkdir($dir,0777,true);
+        if(file_exists($dir.'/'.$key)) {
+            $json = file_get_contents($dir.'/'.$key);
+            return json_decode($json,true);
+        }
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);        
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
+        curl_setopt($ch, CURLOPT_USERAGENT,"CHOUCHANG"); 
+        $content=curl_exec($ch);
+        $content = mb_convert_encoding($content,'UTF-8','GBK');
+        preg_match('/toPage\(\s\d\s\);return false">最后页/i',$content, $matches);
+        $all_page = substr($matches[0],8,1);
+        preg_match_all('/<tr height=14 style=[\s\S]*?<\/tr>/i',$content, $matches);
+        $matches = $matches[0];
+        for($i=0;$i<count($matches);$i++)
+        {
+            $matches[$i] = preg_replace("/(<tr|<td)[\s\S]*?>|\n|\s|<\/tr>/",'',$matches[$i]);
+            $matches[$i] = explode('</td>',$matches[$i]);
+        }
+        $matches[0] = $all_page;
+        $matches=array_splice($matches,0,-1);
+        $json = json_encode($matches);
+        file_put_contents($dir.'/'.$key,$json);
+        return $matches;
+    }
+    
+	public function bk_personal_kccj($kch,$kxh,$page=1)
+	{
+        $kccj = $this->bk_kccj($kch,$kxh,$page);
+        foreach($kccj as $v){
+            if($v[1] == $this->user){
+                return $v;
+                break;
+            }
+        }
+        if($page<$kccj[0]) return $this->bk_personal_kccj($kch,$kxh,++$page);
+        else return array();
+    }
 }
