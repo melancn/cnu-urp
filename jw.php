@@ -400,4 +400,20 @@ class jw
         if($page<$kccj[0]) return $this->bk_personal_kccj($kch,$kxh,++$page);
         else return array();
     }
+	
+	private function listCookie($content){
+		list($header, $body) = explode("\r\n\r\n", $content);
+		preg_match_all("/set\-cookie:\s([^\r\n]*)/i", $header, $c);
+		
+		foreach($c[1] as $v){
+			preg_match('/[^;]+/i',$v,$matches);
+			$temp = explode('=',$matches[0],2);
+			$this->cookieArr[$temp[0]] = $temp[1];
+		}
+
+		foreach($this->cookieArr as $k => $v){
+			$this->cookie .= $k.'='.$v.'; ';
+		}
+		
+	}
 }
