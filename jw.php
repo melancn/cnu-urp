@@ -380,9 +380,22 @@ class jw
             }
             $arr['data'][] = $data[0];
         }
+        preg_match('#总成绩=</td>.*?</td>#s',$content,$matches);
+        $arr['score_express']['total'] = strip_tags($matches[0]);
+        preg_match('#其中.*?</td>.*?</td>#s',$content,$matches);
+        $arr['score_express']['class'] = strip_tags($matches[0]);
+        
+        preg_match('#<tr height=14.*?</tr>#s',$content,$matches);
+        $arr['course_info']['term'] = strip_tags($matches[0]);//学期
+        preg_match('#<tr height=16.*?</tr>#s',$content,$matches);
+        $arr['course_info']['name'] = strip_tags($matches[0]);//课程名称
+        preg_match('#<tr height=17.*?</tr>#s',$content,$matches);
+        $arr['course_info']['info'] = strip_tags($matches[0]);//课程号 课序号 学分 任课教师
+        preg_match('#应考人数.*?</tr>#s',$content,$matches);
+        $arr['course_info']['person_num'] = strip_tags($matches[0]);//考试人数 平均成绩
         $json = json_encode($arr);
         file_put_contents($dir.'/'.$key,$json);
-        return $matches;
+        return $arr;
     }
     
     public function bk_personal_kccj($kch,$kxh,$page=1)
