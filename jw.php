@@ -3,6 +3,7 @@
 class jw
 {
     private $count = 0;
+    private $nowTime = 0;
     private $PortalCookie;
     private $UidCookie;
     private $UrpCookie;
@@ -24,6 +25,7 @@ class jw
         $this->PortalCookie = false;
         $this->UidCookie = false;
         $this->UrpCookie = false;
+        $this->nowTime = $_SERVER['REQUEST_TIME_FLOAT'];
     }  
     
     public function getTime(){
@@ -61,8 +63,7 @@ class jw
                 ));
                 $content = curl_exec($ch);
                 if(stripos($content,'https://vpn.cnu.edu.cn/prx/000/http/localhost/welcome') !== false){
-                    $this->isuser = 1;
-                    return 1;
+                    $this->isuser = array('code'=>1,'msg'=>'验证成功');
                 }
             }else{
                 //判断是否成功
@@ -70,19 +71,16 @@ class jw
                     list($header, $body) = explode("\r\n\r\n", $content);
                     preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
                     $this->UidCookie = implode('',$matches[1]);
-                    $this->isuser = 1;
-                    return 1;
+                    $this->isuser = array('code'=>1,'msg'=>'验证成功');
                 }elseif(preg_match("/handleLoginFailure/i", $content)) {
-                    $this->isuser = 2;
-                    return 2;
+                    $this->isuser = array('code'=>2,'msg'=>'用户不存在或密码错误，请重新绑定');
                 }
             }
-            $this->isuser = 3;
-            return 3;
+            $this->isuser = array('code'=>3,'msg'=>'未知错误，请重试发起请求');
         }else{
-            $this->isuser = 0;
-            return 0;
+            $this->isuser = array('code'=>0,'msg'=>'用户不存在或密码错误，请重新绑定');
         }
+        return $this->isuser;
     }
     
     private function bk_jw_info()
@@ -93,13 +91,14 @@ class jw
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 0);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);  
-        //curl_setopt($ch, CURLOPT_TIMEOUT,1);
+        curl_setopt($ch, CURLOPT_TIMEOUT,5);
         curl_setopt($ch, CURLOPT_COOKIE, $this->GetUidCookie());
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
         $html=curl_exec($ch);
         curl_close($ch);
         preg_match_all('/href="(.*?)"/',$html,$matches);
-        return $matches[1][0];
+        if(empty($matches[1][0])) return '';
+        else return $matches[1][0];
     }
     
     private function getUrpCookie()
@@ -107,11 +106,12 @@ class jw
         if(!empty($this->UrpCookie)) return $this->UrpCookie;
         
         $url = $this->bk_jw_info();
+        if(empty($url)) return '';
         //进入URP,获取cook
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
-        // curl_setopt($ch, CURLOPT_TIMEOUT,2);
+        curl_setopt($ch, CURLOPT_TIMEOUT,5);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
         $content = curl_exec($ch);
@@ -173,9 +173,9 @@ class jw
         if(preg_match('/^2\d+/',$this->user)) return array('code'=>0,'msg'=>'不支持研究生查询');
         
         //判、判断保存的账号是否正确
-        if ($this->is_user() === 1){         
-            $html = $this->bk_cj_all();
-        }else return array('code'=>0,'msg'=>'账号密码错误');
+        $isuser = $this->is_user();
+        if ($isuser['code'] === 1) $html = $this->bk_cj_all();
+        else return $isuser;
         if(empty($html)) return array('code'=>0,'msg'=>'服务器错误');
         if(!preg_match('/500 Servlet Exception/',$html)){
             //解析分数页面
@@ -183,11 +183,11 @@ class jw
             $mmmm = $matches[1][0];
             preg_match_all("/<tr class=\"odd([\S\s]*?)<\/tr>/i", $html, $matches);
             $count = count($matches[0]);
-			if(!$count) return array('code'=>1,'gpa'=>0,'name'=>$mmmm);
+            if(!$count) return array('code'=>1,'gpa'=>0,'name'=>$mmmm);
             $cache = array();
-			foreach($matches[0] as $k => $v) preg_match_all('/<td align="center">(\s|.)*?<\/td>/i', $v, $cache[$k]);
+            foreach($matches[0] as $k => $v) preg_match_all('/<td align="center">(\s|.)*?<\/td>/i', $v, $cache[$k]);
             $matches = array();
-			foreach($cache as $k => $v) $matches[$k]=$v[0];
+            foreach($cache as $k => $v) $matches[$k]=$v[0];
             foreach($matches[0] as $i => $v){
                 foreach($v as $j => $k){
                     $s[$i][$j]=preg_replace('/<([\S\s]*?)>|<\/([\S\s]*?)>|\s|&nbsp;/i','',$k);
@@ -303,33 +303,30 @@ class jw
         {
             $yjs = $this->yjs_cj();
             if(is_array( $yjs ) && !empty($yjs))return $yjs;
-            else return '研究生教务获取失败';
+            else return array('code'=>0,'msg'=>'研究生教务获取失败');
         }
         //判、判断保存的账号是否正确
             
         $re = $this->is_user();
-        if ($re === 0) return '学号错误，请联系我们';
-        elseif ($re === 1)
-        {//已绑定，获取学号，获取分数
-            $html = $this->bk_bxqcj();
-            if($html == false) return '学校服务器认证错误，请过几分钟再重新查询';
-            if(preg_match('/数据库忙/',$html)) return '请重新查询';
-            if(preg_match('/本学期成绩查询列表/',$html))
-            {
-            //解析本学期分数页面
-                preg_match_all('/<table([\s\S]*?)<\/table>/i',$html,$matches);
-                $content = $matches[0][4];
-                $content = preg_replace('/class="(.*?)"/','',$content);
-                $content = str_replace(array("\n","\t"),'',$content);
-                return $content;
+        if($re['code'] === 1) {//已绑定，获取学号，获取分数
+            $content = $this->bk_bxqcj();
+            if($content == false) return array('code'=>0,'msg'=>'学校服务器认证错误，请过几分钟再重新查询');
+            if(strpos($content,'数据库忙')) return array('code'=>0,'msg'=>'请重新查询');
+            if(strpos($content,'本学期成绩查询列表')){//解析本学期分数页面
+                $result = array();
+                preg_match_all("/<tr class=\"odd\".*?>([\S\s]*?)<\/tr>/i", $content, $matches);
+                foreach($matches[1] as $key => $val){
+                    preg_match_all('/<td align="center">([\S\s]*?)<\/td>/i', $val, $match);
+                    foreach($match[1] as $key1 => $val1){
+                        $match[1][$key1] = trim($val1);
+                    }
+                    $result[] = $match[1];
+                }
+                return array('code'=>1,'msg'=>'查询成功','content'=>$result);
             }
-            elseif( ($this->getTime() - $this->nowTime) >=4.5 )
-                return '请求超时，请重试';
-            else $this->this_score_result();
-        }
-        elseif ($re === 2) return '用户不存在或密码错误，请重新绑定';
-        elseif ($re === 3) return '未知错误，请重试发起请求';
-        else return '请重试';
+            elseif( ($this->getTime() - $this->nowTime) >=15 ) return array('code'=>0,'msg'=>'请求超时，请重试');
+            else return $this->this_score_result();
+        }else return $re;
     }
             
     public function card(){
@@ -347,7 +344,7 @@ class jw
     }
     
     function bk_kccj($kch,$kxh,$page=1)
-	{
+    {
         $month = date('m');
         $year = date('Y');
         if($month<4 || $month>10){
@@ -372,48 +369,47 @@ class jw
         curl_setopt($ch, CURLOPT_USERAGENT,"CHOUCHANG"); 
         $content=curl_exec($ch);
         $content = mb_convert_encoding($content,'UTF-8','GBK');
-        preg_match('/toPage\(\s\d\s\);return false">最后页/i',$content, $matches);
-        $all_page = substr($matches[0],8,1);
+        preg_match('/页号\d+\/(\d+)\|/i',$content, $matches);
+        $arr = array('all_page'=>$matches[1]);
         preg_match_all('/<tr height=14 style=[\s\S]*?<\/tr>/i',$content, $matches);
-        $matches = $matches[0];
-        for($i=0;$i<count($matches);$i++)
-        {
-            $matches[$i] = preg_replace("/(<tr|<td)[\s\S]*?>|\n|\s|<\/tr>/",'',$matches[$i]);
-            $matches[$i] = explode('</td>',$matches[$i]);
+        foreach($matches[0] as $k => $v){
+            preg_match_all('/<td.+?\/td>/i',$v, $data);
+            if(count($data[0]) < 13) continue;
+            foreach($data[0] as $k2 => $v2){
+                $data[0][$k2] = strip_tags($v2);
+            }
+            $arr['data'][] = $data[0];
         }
-        $matches[0] = $all_page;
-        $matches=array_splice($matches,0,-1);
-        $json = json_encode($matches);
+        $json = json_encode($arr);
         file_put_contents($dir.'/'.$key,$json);
         return $matches;
     }
     
-	public function bk_personal_kccj($kch,$kxh,$page=1)
-	{
+    public function bk_personal_kccj($kch,$kxh,$page=1)
+    {
         $kccj = $this->bk_kccj($kch,$kxh,$page);
-        foreach($kccj as $v){
+        foreach($kccj['data'] as $v){
             if($v[1] == $this->user){
                 return $v;
-                break;
             }
         }
         if($page<$kccj[0]) return $this->bk_personal_kccj($kch,$kxh,++$page);
         else return array();
     }
-	
-	private function listCookie($content){
-		list($header, $body) = explode("\r\n\r\n", $content);
-		preg_match_all("/set\-cookie:\s([^\r\n]*)/i", $header, $c);
-		
-		foreach($c[1] as $v){
-			preg_match('/[^;]+/i',$v,$matches);
-			$temp = explode('=',$matches[0],2);
-			$this->cookieArr[$temp[0]] = $temp[1];
-		}
+    
+    private function listCookie($content){
+        list($header, $body) = explode("\r\n\r\n", $content);
+        preg_match_all("/set\-cookie:\s([^\r\n]*)/i", $header, $c);
+        
+        foreach($c[1] as $v){
+            preg_match('/[^;]+/i',$v,$matches);
+            $temp = explode('=',$matches[0],2);
+            $this->cookieArr[$temp[0]] = $temp[1];
+        }
 
-		foreach($this->cookieArr as $k => $v){
-			$this->cookie .= $k.'='.$v.'; ';
-		}
-		
-	}
+        foreach($this->cookieArr as $k => $v){
+            $this->cookie .= $k.'='.$v.'; ';
+        }
+        
+    }
 }
