@@ -25,7 +25,7 @@ class jw
         $this->PortalCookie = false;
         $this->UidCookie = false;
         $this->UrpCookie = false;
-        $this->nowTime = $_SERVER['REQUEST_TIME_FLOAT'];
+        $this->nowTime = $this->getTime();
     }  
     
     public function getTime(){
@@ -63,7 +63,7 @@ class jw
                 ));
                 $content = curl_exec($ch);
                 if(stripos($content,'https://vpn.cnu.edu.cn/prx/000/http/localhost/welcome') !== false){
-                    $this->isuser = array('code'=>1,'msg'=>'验证成功');
+                    return $this->isuser = array('code'=>1,'msg'=>'验证成功');
                 }
             }else{
                 //判断是否成功
@@ -71,14 +71,14 @@ class jw
                     list($header, $body) = explode("\r\n\r\n", $content);
                     preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
                     $this->UidCookie = implode('',$matches[1]);
-                    $this->isuser = array('code'=>1,'msg'=>'验证成功');
+                    return $this->isuser = array('code'=>1,'msg'=>'验证成功');
                 }elseif(preg_match("/handleLoginFailure/i", $content)) {
-                    $this->isuser = array('code'=>2,'msg'=>'用户不存在或密码错误，请重新绑定');
+                    return $this->isuser = array('code'=>2,'msg'=>'用户不存在或密码错误，请重新绑定');
                 }
             }
-            $this->isuser = array('code'=>3,'msg'=>'未知错误，请重试发起请求');
+            return $this->isuser = array('code'=>3,'msg'=>'未知错误，请重试发起请求');
         }else{
-            $this->isuser = array('code'=>0,'msg'=>'用户不存在或密码错误，请重新绑定');
+            return $this->isuser = array('code'=>0,'msg'=>'用户不存在或密码错误，请重新绑定');
         }
         return $this->isuser;
     }
@@ -116,7 +116,7 @@ class jw
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
         $content = curl_exec($ch);
         // 解析COOKIE
-        preg_match("/set\-cookie:([^\r\n]*)/i",$content, $matches);
+        preg_match_all("/set\-cookie:([^\r\n]*)/i",$content, $matches);
         $this->UrpCookie = implode('',$matches[1]);
         return $this->UrpCookie;
     }
@@ -188,7 +188,7 @@ class jw
             foreach($matches[0] as $k => $v) preg_match_all('/<td align="center">(\s|.)*?<\/td>/i', $v, $cache[$k]);
             $matches = array();
             foreach($cache as $k => $v) $matches[$k]=$v[0];
-            foreach($matches[0] as $i => $v){
+            foreach($matches as $i => $v){
                 foreach($v as $j => $k){
                     $s[$i][$j]=preg_replace('/<([\S\s]*?)>|<\/([\S\s]*?)>|\s|&nbsp;/i','',$k);
                 }
@@ -347,8 +347,10 @@ class jw
     {
         $month = date('m');
         $year = date('Y');
-        if($month<4 || $month>10){
+        if($month<5){
             $xq = ($year-1).'-'.$year.'-1-1';
+        }elseif($month>11){
+            $xq = $year.'-'.($year+1).'-1-1';
         }else{
             $xq = ($year-1).'-'.$year.'-2-1';
         }
@@ -403,11 +405,11 @@ class jw
         $kccj = $this->bk_kccj($kch,$kxh,$page);
         foreach($kccj['data'] as $v){
             if($v[1] == $this->user){
-                return $v;
+                return array('code'=>1,'data'=>$v,'course_info'=>$kccj['course_info'],'score_express'=>$kccj['score_express'],'msg'=>'成功');
             }
         }
         if($page<$kccj[0]) return $this->bk_personal_kccj($kch,$kxh,++$page);
-        else return array();
+        else return array('code'=>0,'msg'=>'失败');
     }
     
     private function listCookie($content){
