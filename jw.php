@@ -408,7 +408,7 @@ class jw
                 return array('code'=>1,'data'=>$v,'course_info'=>$kccj['course_info'],'score_express'=>$kccj['score_express'],'msg'=>'成功');
             }
         }
-        if($page<$kccj[0]) return $this->bk_personal_kccj($kch,$kxh,++$page);
+        if($page<$kccj['all_page']) return $this->bk_personal_kccj($kch,$kxh,++$page);
         else return array('code'=>0,'msg'=>'失败');
     }
     
