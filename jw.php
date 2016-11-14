@@ -380,21 +380,30 @@ class jw
             foreach($data[0] as $k2 => $v2){
                 $data[0][$k2] = strip_tags($v2);
             }
+            if(empty($data[0][2])) continue;
             $arr['data'][] = $data[0];
         }
+        if(empty($arr['data'])) return array();
         preg_match('#总成绩=</td>.*?</td>#s',$content,$matches);
-        $arr['score_express']['total'] = strip_tags($matches[0]);
+        $arr['score_express']['total'] = trim(strip_tags($matches[0]));
         preg_match('#其中.*?</td>.*?</td>#s',$content,$matches);
-        $arr['score_express']['class'] = strip_tags($matches[0]);
+        $arr['score_express']['class'] = trim(strip_tags($matches[0]));
         
         preg_match('#<tr height=14.*?</tr>#s',$content,$matches);
-        $arr['course_info']['term'] = strip_tags($matches[0]);//学期
+        $arr['course_info']['term'] = trim(strip_tags($matches[0]));//学期
+        if(empty($arr['course_info']['term'])) return array();
+        
         preg_match('#<tr height=16.*?</tr>#s',$content,$matches);
-        $arr['course_info']['name'] = strip_tags($matches[0]);//课程名称
+        $arr['course_info']['name'] = trim(strip_tags($matches[0]));//课程名称
+        if(empty($arr['course_info']['name'])) return array();
+        
         preg_match('#<tr height=17.*?</tr>#s',$content,$matches);
-        $arr['course_info']['info'] = strip_tags($matches[0]);//课程号 课序号 学分 任课教师
+        $arr['course_info']['info'] = trim(strip_tags($matches[0]));//课程号 课序号 学分 任课教师
+        if(empty($arr['course_info']['info'])) return array();
+        
         preg_match('#应考人数.*?</tr>#s',$content,$matches);
-        $arr['course_info']['person_num'] = strip_tags($matches[0]);//考试人数 平均成绩
+        $arr['course_info']['person_num'] = trim(strip_tags($matches[0]));//考试人数 平均成绩
+        if(empty($arr['course_info']['person_num'])) return array();
         $json = json_encode($arr);
         file_put_contents($dir.'/'.$key,$json);
         return $arr;
@@ -403,6 +412,7 @@ class jw
     public function bk_personal_kccj($kch,$kxh,$page=1)
     {
         $kccj = $this->bk_kccj($kch,$kxh,$page);
+        if(empty($kccj)) return array('code'=>0,'msg'=>'未知错误，查询失败！');
         foreach($kccj['data'] as $v){
             if($v[1] == $this->user){
                 return array('code'=>1,'data'=>$v,'course_info'=>$kccj['course_info'],'score_express'=>$kccj['score_express'],'msg'=>'成功');
