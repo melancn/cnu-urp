@@ -7,6 +7,7 @@ class jw
     private $PortalCookie;
     private $UidCookie;
     private $UrpCookie;
+    private $UrpUrl;
     private $PortalBill;
     private $SsoBill;
     private $user;
@@ -25,6 +26,7 @@ class jw
         $this->PortalCookie = false;
         $this->UidCookie = false;
         $this->UrpCookie = false;
+        $this->UrpUrl = '';
         $this->nowTime = $this->getTime();
     }  
     
@@ -37,8 +39,7 @@ class jw
     {
         if($this->isuser !== false) return $this->isuser;
         if(is_numeric($this->user) && !empty($this->psw)){
-            $this->psw = urlencode($this->psw);
-            $url = "http://portal.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2={$this->psw}";
+            $url = "http://portal.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2=".urlencode($this->psw);
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -83,7 +84,7 @@ class jw
         return $this->isuser;
     }
     
-    private function bk_jw_info()
+    public function bk_jw_info()
     {
         //进入URP,获取cook
         $url = "http://xk.cnu.edu.cn/";
@@ -101,11 +102,12 @@ class jw
         else return $matches[1][0];
     }
     
-    private function getUrpCookie()
+    private function getUrpCookie($url = '')
     {
         if(!empty($this->UrpCookie)) return $this->UrpCookie;
         
-        $url = $this->bk_jw_info();
+        $url = $url ? $url : ($this->UrpUrl ? $this->UrpUrl : $this->bk_jw_info());
+        $this->UrpUrl = $url;
         if(empty($url)) return '';
         //进入URP,获取cook
         $ch = curl_init();
@@ -119,6 +121,21 @@ class jw
         preg_match_all("/set\-cookie:([^\r\n]*)/i",$content, $matches);
         $this->UrpCookie = implode('',$matches[1]);
         return $this->UrpCookie;
+    }
+    
+    public function testUrpCookie($cookie = ''){
+        $cookie = $cookie ? $cookie : $this->getUrpCookie();
+        if(empty($cookie)) return false;
+        //进入URP,获取cook
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, 'http://202.204.208.75');
+        curl_setopt($ch, CURLOPT_HEADER, 1);
+        curl_setopt($ch, CURLOPT_TIMEOUT,5);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
+        $content = curl_exec($ch);
+        if(curl_getinfo($ch,CURLINFO_HTTP_CODE) != 200) return false;
+        return stripos($content,'mainFrame') !== false;
     }
     
     public function bk_bxqcj()
@@ -275,8 +292,7 @@ class jw
     {
         if($this->UidCookie) return $this->UidCookie;
         else{
-            $this->psw = urlencode($this->psw);
-            $url = "http://portal.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2={$this->psw}";
+            $url = "http://portal.cnu.edu.cn/userPasswordValidate.portal?Login.Token1={$this->user}&Login.Token2=".urlencode($this->psw);
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -286,7 +302,7 @@ class jw
             $content = curl_exec($ch);
             curl_close($ch);
             //判断是否成功
-            if(preg_match("/handleLoginSuccessed/i", $content)){
+            if(stripos($content, 'handleLoginSuccessed')){
                 list($header, $body) = explode("\r\n\r\n", $content);
                 preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
                 $this->UidCookie = implode('',$matches[1]);
@@ -343,7 +359,7 @@ class jw
         return str_replace('&nbsp;','',strip_tags(trim($match[1])));
     }
     
-    function bk_kccj($kch,$kxh,$page=1)
+    public function get_school_term()
     {
         $month = date('m');
         $year = date('Y');
@@ -354,6 +370,18 @@ class jw
         }else{
             $xq = ($year-1).'-'.$year.'-2-1';
         }
+        return $xq;
+    }
+    
+    public function bk_kccj_file_exists($kch,$kxh,$page=1){
+        $xq = $this->get_school_term();
+        $key = md5($xq.'_'.$kch.'_'.$kxh.'_'.$page);
+        return file_exists('/tmp/scoretable/'.$xq.'/'.$key);
+    }
+    
+    public function bk_kccj($kch,$kxh,$page=1)
+    {
+        $xq = $this->get_school_term();
         $key = md5($xq.'_'.$kch.'_'.$kxh.'_'.$page);
         //进入URP,获取cook
         $dir = '/tmp/scoretable/'.$xq;
@@ -370,8 +398,9 @@ class jw
         curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
         curl_setopt($ch, CURLOPT_USERAGENT,"CHOUCHANG"); 
         $content=curl_exec($ch);
+        if(curl_getinfo($ch,CURLINFO_HTTP_CODE) != 200) return array();
         $content = mb_convert_encoding($content,'UTF-8','GBK');
-        preg_match('/页号\d+\/(\d+)\|/i',$content, $matches);
+        if(!preg_match('/页号\d+\/(\d+)\|/i',$content, $matches)) return array();
         $arr = array('all_page'=>$matches[1]);
         preg_match_all('/<tr height=14 style=[\s\S]*?<\/tr>/i',$content, $matches);
         foreach($matches[0] as $k => $v){
@@ -385,9 +414,9 @@ class jw
         }
         if(empty($arr['data'])) return array();
         preg_match('#总成绩=</td>.*?</td>#s',$content,$matches);
-        $arr['score_express']['total'] = trim(strip_tags($matches[0]));
+        $arr['score_express']['total'] = strip_tags($matches[0]);
         preg_match('#其中.*?</td>.*?</td>#s',$content,$matches);
-        $arr['score_express']['class'] = trim(strip_tags($matches[0]));
+        $arr['score_express']['class'] = strip_tags($matches[0]);
         
         preg_match('#<tr height=14.*?</tr>#s',$content,$matches);
         $arr['course_info']['term'] = trim(strip_tags($matches[0]));//学期
@@ -404,6 +433,8 @@ class jw
         preg_match('#应考人数.*?</tr>#s',$content,$matches);
         $arr['course_info']['person_num'] = trim(strip_tags($matches[0]));//考试人数 平均成绩
         if(empty($arr['course_info']['person_num'])) return array();
+        if( preg_match('/0\.00$/',$arr['course_info']['person_num'])) return array();
+
         $json = json_encode($arr);
         file_put_contents($dir.'/'.$key,$json);
         return $arr;
