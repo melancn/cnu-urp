@@ -2,12 +2,19 @@
 //--------------------------------------教务系统--------------------------------------------------
 class jw
 {
+    const qbinfourl = 'http://202.204.208.75/gradeLnAllAction.do?type=ln&oper=qbinfo'; //全部及格成绩查询
+    const fawcqkurl = 'http://202.204.208.75/fawcqkAction.do?oper=ori'; //培养方案完成情况
+    const jxpglisturl = 'http://202.204.208.75/jxpgXsAction.do?oper=listWj&pageSize=100'; //学生评估问卷列表
+    const jxpgurl = 'http://202.204.208.75/jxpgXsAction.do'; //学生评估问卷列表
+    const jxpg_submiturl = 'http://202.204.208.75/jxpgXsAction.do?oper=wjpg'; //学生评估问卷列表
+
+	
     private $count = 0;
     private $nowTime = 0;
     private $PortalCookie;
     private $UidCookie;
     private $UrpCookie;
-    private $UrpUrl;
+    public $UrpUrl;
     private $PortalBill;
     private $SsoBill;
     private $user;
@@ -102,9 +109,18 @@ class jw
         else return $matches[1][0];
     }
     
-    private function getUrpCookie($url = '')
+    public function getUrpCookie($url = '')
     {
-        if(!empty($this->UrpCookie)) return $this->UrpCookie;
+        if(empty($url) || strpos($url,$this->user) !== false){
+            if(!empty($this->UrpCookie)) return $this->UrpCookie;
+            elseif(!empty($_COOKIE['urpcookie'])){
+                $c = json_decode($_COOKIE['urpcookie']);
+                if($this->user == $c->u && $c->t + 300 > $_SERVER['REQUEST_TIME']){
+                    $this->UrpCookie = $c->c;
+                    return $this->UrpCookie;
+                }
+            }
+        }
         
         $url = $url ? $url : ($this->UrpUrl ? $this->UrpUrl : $this->bk_jw_info());
         $this->UrpUrl = $url;
@@ -117,9 +133,12 @@ class jw
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
         $content = curl_exec($ch);
+        if(curl_getinfo($ch,CURLINFO_HTTP_CODE) != 200) return false;
+        if(stripos($content,'mainFrame') === false) return '';
         // 解析COOKIE
         preg_match_all("/set\-cookie:([^\r\n]*)/i",$content, $matches);
-        $this->UrpCookie = implode('',$matches[1]);
+        $this->UrpCookie = implode('; ',$matches[1]);
+        setcookie('urpcookie',json_encode(array('u'=>$this->user,'c'=>$this->UrpCookie,'t'=>$_SERVER['REQUEST_TIME'])),0,'/','.cnuer.cn',false,true);
         return $this->UrpCookie;
     }
     
@@ -156,6 +175,49 @@ class jw
         }
         return mb_convert_encoding($html,'UTF-8','GBK');
     }
+
+    //分学期获取成绩
+    public function bk_cj_qbinfo()
+    {
+        //需要先获取这个页面，不然获取全部成绩会有很大几率页面错误
+        $url = 'http://202.204.208.75/gradeLnAllAction.do?type=ln&oper=fa';
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_HTTPHEADER,array('Accept-Language: zh-cn','Connection: Keep-Alive'));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
+        curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
+        $content=curl_exec($ch);
+
+        $url = 'http://202.204.208.75/gradeLnAllAction.do?type=ln&oper=qbinfo&lnxndm=2';
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);
+        curl_setopt($ch, CURLOPT_TIMEOUT,2);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
+        curl_setopt($ch, CURLOPT_USERAGENT,"chouchang");
+        $content = curl_exec($ch);
+        curl_close($ch);
+        $content = mb_convert_encoding($content,'UTF-8','GBK');
+        if(preg_match("/数据库忙/",$content) && $this->count <=2){
+            $this->count ++;
+            return $this->bk_cj_qbinfo();//
+        }
+        preg_match_all('/<a name="(\d{4}-\d{4}.+?)".+?display(.+?)<\/table>/s',$content,$tab);
+        $data = array();
+        foreach($tab[2] as $k => $v){
+            preg_match_all('/<tr class="odd".+?<\/tr>/s',$v,$td);
+            foreach($td[0] as $vd){
+                preg_match_all('/<td align="center">(.+?)<\/td>/s',$vd,$m);
+                $key = trim($m[1][0]).'_'.trim($m[1][1]);
+                $data[$key] = $tab[1][$k];
+            }
+        }
+        return $data;
+    }
+
     
     public function bk_cj_all()
     {
@@ -181,7 +243,48 @@ class jw
         $content=curl_exec($ch);
         curl_close($ch);
         
-        return mb_convert_encoding($content,'UTF-8','GBK');
+        $content = mb_convert_encoding($content,'UTF-8','GBK');
+		
+		if(preg_match('/500 Servlet Exception/',$content)){
+			return array('code'=>0,'matches'=>0,'mmmm'=>0);
+		}
+		
+		preg_match_all("/<td valign=\"middle\">&nbsp;<b>([\S\s]*?)<\/b>/i", $content, $matches);//获取方案名称
+		$mmmm = $matches[1][0];
+		preg_match_all("/<tr class=\"odd([\S\s]*?)<\/tr>/i", $content, $matches);
+		$count = count($matches[0]);
+		if(!$count){
+			$ch = curl_init();
+			curl_setopt($ch, CURLOPT_URL, self::fawcqkurl);
+			curl_setopt($ch, CURLOPT_HEADER, 0);
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);        
+			curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
+			curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
+			$content=curl_exec($ch);
+                        $content = mb_convert_encoding($content,'UTF-8','GBK');
+			if(preg_match('/500 Servlet Exception/',$content)){
+				return array('code'=>0,'matches'=>0,'mmmm'=>0);
+			}
+			preg_match('/<input type="radio" name="fajhh"[^>]+(.*?)<\/td>/is', $content, $matche);//获取方案名称
+			$mmmm = $matche[1];
+			
+			$ch = curl_init();
+			curl_setopt($ch, CURLOPT_URL, self::qbinfourl);
+			curl_setopt($ch, CURLOPT_HEADER, 0);
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);        
+			curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
+			curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
+			$content=curl_exec($ch);
+                        $content = mb_convert_encoding($content,'UTF-8','GBK');
+			if(preg_match('/500 Servlet Exception/',$content)){
+				return array('code'=>0,'matches'=>0,'mmmm'=>0);
+			}
+			preg_match_all("/<tr class=\"odd([\S\s]*?)<\/tr>/i", $content, $matches);
+			$count = count($matches[0]);
+			
+			if(!$count) return array('code'=>0,'matches'=>0,'mmmm'=>$mmmm);
+		}
+		return array('code'=>1,'matches'=>$matches,'mmmm'=>$mmmm);
     }
     
     //--------------------绩点-----------------------------------
@@ -191,14 +294,13 @@ class jw
         
         //判、判断保存的账号是否正确
         $isuser = $this->is_user();
-        if ($isuser['code'] === 1) $html = $this->bk_cj_all();
+        if ($isuser['code'] === 1) $cjarr = $this->bk_cj_all();
         else return $isuser;
-        if(empty($html)) return array('code'=>0,'msg'=>'服务器错误');
-        if(!preg_match('/500 Servlet Exception/',$html)){
+        if($cjarr['code'] === 0) return array('code'=>0,'msg'=>'服务器错误');
+        elseif($cjarr['code'] === 1){
             //解析分数页面
-            preg_match_all("/<td valign=\"middle\">&nbsp;<b>([\S\s]*?)<\/b>/i", $html, $matches);//获取方案名称
-            $mmmm = $matches[1][0];
-            preg_match_all("/<tr class=\"odd([\S\s]*?)<\/tr>/i", $html, $matches);
+            $mmmm = $cjarr['mmmm'];//获取方案名称
+			$matches = $cjarr['matches'];
             $count = count($matches[0]);
             if(!$count) return array('code'=>1,'gpa'=>0,'name'=>$mmmm);
             $cache = array();
@@ -229,27 +331,49 @@ class jw
         }else return array('code'=>0,'msg'=>'服务器繁忙');
     }
     
-    public function yjs_cj()
+    public function get_yjsjw()
     {
-        $bill = $this->model($this->user,$this->psw,'newjw_yjs');
-                //进入URP,获取cook
-        $url = "http://202.204.208.67:8082/menHu.do?bill={$bill}";
+        static $times = 0;
+        $url = 'http://202.204.208.108/login.do';
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);  
+        curl_setopt($ch, CURLOPT_TIMEOUT,2);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->cookie);   
         curl_setopt($ch, CURLOPT_ENCODING, '');   
         curl_setopt($ch, CURLOPT_USERAGENT,"Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)");
         $content = curl_exec($ch);
-        //获取登陆账号密码j_acegi_login.do
-        preg_match_all("/value=\"(.*?)\"/i",$content, $matches);
-        $this->psw=$matches[1][2];
+        $this->listCookie($content);
         
-        $url = "http://202.204.208.67:8082/j_acegi_login.do?j_captcha_response=&j_username={$this->user}&j_password={$this->psw}";
+        $url = "http://202.204.208.108/jinzhiNew_LoginAction.do?uid={$this->user}";
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HEADER, 1);
+        curl_setopt($ch, CURLOPT_TIMEOUT,3);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);  
+        curl_setopt($ch, CURLOPT_COOKIE, $this->cookie);   
+        curl_setopt($ch, CURLOPT_ENCODING, '');   
+        curl_setopt($ch, CURLOPT_USERAGENT,"Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)");
+        $content = curl_exec($ch);
+        $this->listCookie($content);
+        $info = curl_getinfo($ch);
+        if(strpos($info['redirect_url'],'code.timeout.do') !== false){
+            $times++;
+            if($times <= 3)return $this->get_yjsjw();
+            return 0;
+        }
+        return $info['redirect_url'];
+    }
+    
+    public function yjs_cj()
+    {
+        $url = $this->get_yjsjw();
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 1);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
+        curl_setopt($ch, CURLOPT_COOKIE, $this->cookie);   
         curl_setopt($ch, CURLOPT_TIMEOUT,2);
         curl_setopt($ch, CURLOPT_ENCODING, '');   
         curl_setopt($ch, CURLOPT_HTTPHEADER,array('Accept-Language: zh-cn','Connection: Keep-Alive')); 
@@ -258,34 +382,24 @@ class jw
         //检测是否登陆成功
         if(empty($content) || preg_match("/login_error=error/i",$content))return false;
         // 解析COOKIE
-        preg_match("/set\-cookie:([^\r\n]*)/i",$content, $matches);
-        $cookie = $matches[1];
+        $this->listCookie($content);
 
-        $url = 'http://202.204.208.67:8082/cjgl.v_allcj_yjs.do';
+        $url = 'http://202.204.208.108/cjgl.v_allcj_yjs.do';
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_TIMEOUT,5);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER,1); 
         curl_setopt($ch, CURLOPT_HTTPHEADER,array('Accept-Language: zh-cn','Connection: Keep-Alive'));   
-        curl_setopt($ch, CURLOPT_COOKIE, $cookie);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->cookie);
         curl_setopt($ch, CURLOPT_USERAGENT,"Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)"); 
         $html=curl_exec($ch);
         curl_close($ch);
         $html = mb_convert_encoding($html,'UTF-8','GBK');
         
-        preg_match('/gridData =[\s\S]*?<\/script>/',$html,$s);
-        $s=preg_replace('/<\/script>|\];|\n|\s/','',$s);
-        $s=preg_replace('/gridData=\[|,"<ahref[\s\S]*?<\/a>"|"/','',$s);
-        preg_match_all('/\[[\s\S]*?\]/',$s[0],$matchs);
-        $s=array();
-        for($i=0;$i<count($matchs[0]);$i++)
-        {
-            $matchs[0][$i]=preg_replace('/\[|\]/',"",$matchs[0][$i]);
-            $matchs[0][$i]=explode(',',$matchs[0][$i]);
-            $s[$i]=$matchs[0][$i];
-        }
+        preg_match('/gridData =(.+]);/is',$html,$s);
     
-        return $s;
+        return json_decode($s[1]);
     }
     
     private function GetUidCookie()
@@ -305,8 +419,10 @@ class jw
             if(stripos($content, 'handleLoginSuccessed')){
                 list($header, $body) = explode("\r\n\r\n", $content);
                 preg_match_all("/set\-cookie:([^\r\n]*)/i", $header, $matches);
-                $this->UidCookie = implode('',$matches[1]);
+                $this->UidCookie = implode('; ',$matches[1]);
                 return $this->UidCookie;
+            }elseif(strpos($content, '用户不存在或密码错误')){
+                return '';
             }
             else $this->GetUidCookie();
         }
@@ -379,9 +495,9 @@ class jw
         return file_exists('/tmp/scoretable/'.$xq.'/'.$key);
     }
     
-    public function bk_kccj($kch,$kxh,$page=1)
+    public function bk_kccj($kch,$kxh,$page=1,$xq = '')
     {
-        $xq = $this->get_school_term();
+        $xq = $xq ? $xq : $this->get_school_term();
         $key = md5($xq.'_'.$kch.'_'.$kxh.'_'.$page);
         //进入URP,获取cook
         $dir = '/tmp/scoretable/'.$xq;
@@ -436,7 +552,6 @@ class jw
         if( preg_match('/0\.00$/',$arr['course_info']['person_num'])) return array();
 
         $json = json_encode($arr);
-        file_put_contents($dir.'/'.$key,$json);
         return $arr;
     }
     
@@ -463,9 +578,111 @@ class jw
             $this->cookieArr[$temp[0]] = $temp[1];
         }
 
+        $this->cookie = '';
         foreach($this->cookieArr as $k => $v){
             $this->cookie .= $k.'='.$v.'; ';
         }
         
+    }
+    public function bk_jxpg_list()
+    {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, self::jxpglisturl);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);  
+        curl_setopt($ch, CURLOPT_TIMEOUT,2);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
+        curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
+        $content = curl_exec($ch);
+        curl_close($ch);
+        $content = mb_convert_encoding($content,'UTF-8','GBK');
+        if(preg_match("/数据库忙/",$content) && $this->count !=2){
+            $this->count ++;
+            return $this->bk_jxpg_list();//
+        }
+        if(empty($content)) return array('code'=>0,'msg'=>'null content');
+//        if(preg_match("/未开放/",$content)) return array('code'=>0,'msg'=>'null content');
+        preg_match('/class="titleTop2">(.*?)<\/table>/is', $content, $match);
+        preg_match_all("/<tr class=\"odd\".*?>(.*?)<\/tr>/is", $match[1], $matches);
+        $data = array();
+        foreach($matches[1] as $k => $v){
+            $temp = array();
+            preg_match_all('/<td align="center">(.*?)<\/td>/is', $v, $m);
+            $temp = $m[1];
+            preg_match('/name="(.*?)"/', $temp[4], $m2);
+            $temp[4] = $m2[1];
+            $data[] = $temp;
+        }
+
+        return array('code'=>1,'msg'=>'success','data'=>$data);
+    }
+    
+    public function bk_jxpg_wj($wjbm,$bpr,$bprm,$wjmc,$pgnrm,$pgnr,$oper = 'wjResultShow')
+    {
+        $data = array(
+            'wjbm'=>$wjbm,
+            'bpr'=>$bpr,
+            'pgnr'=>$pgnr,
+            'oper'=>$oper,
+            'wjmc'=>$wjmc,
+            'bprm'=>$bprm,
+            'pgnrm'=>$pgnrm,
+            'pageSize'=>20,
+            'page'=>1,
+            'pageNo'=>'',
+            'currentPage'=>1
+        );
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, self::jxpglisturl);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);  
+        curl_setopt($ch, CURLOPT_TIMEOUT,2);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
+        curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
+        $content = curl_exec($ch);
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, self::jxpgurl);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);  
+        curl_setopt($ch, CURLOPT_TIMEOUT,2);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
+        curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
+        $content = curl_exec($ch);
+        curl_close($ch);
+        $content = str_replace("\t",'',$content);
+        $content = mb_convert_encoding($content,'UTF-8','GBK');
+        if(preg_match("/数据库忙/",$content) && $this->count <=2){
+            $this->count ++;
+            return $this->bk_jxpg_list($wjbm,$bpr,$bprm,$wjmc,$pgnrm,$pgnr,$oper);
+        }
+        preg_match_all('/<table align="left" border="0" cellspacing="0".+?<\/table>/is', $content, $match);
+
+        return array('code'=>1,'data'=>array('wjbm'=>$wjbm,'bpr'=>$bpr,'pgnr'=>$pgnr,'table'=>$match[0]));
+    }
+    
+    public function bk_jxpg_wj_submit($data)
+    {
+        $data['zgpj'] = mb_convert_encoding($data['zgpj'],'GBK','UTF-8');
+        $data['zgpj1'] = mb_convert_encoding($data['zgpj1'],'GBK','UTF-8');
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, self::jxpg_submiturl);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);  
+        curl_setopt($ch, CURLOPT_TIMEOUT,2);
+        curl_setopt($ch, CURLOPT_COOKIE, $this->getUrpCookie());
+        curl_setopt($ch, CURLOPT_USERAGENT,"chouchang"); 
+        $content = curl_exec($ch);
+        curl_close($ch);
+        $content = mb_convert_encoding($content,'UTF-8','GBK');
+        preg_match('/alert\("(\.+?)"\);/',$content,$m);
+        if(preg_match("/数据库忙/",$content)){
+            return array('code'=>0,'msg'=>'数据库忙！');
+        }
+
+        return array('code'=>1,'msg'=>'提交成功！ '.$m[1]);
     }
 }
